@@ -362,7 +362,7 @@ class DeletionOracle:
 
 
 def extract_nodes(candidates, scores, oracle, rule, pool_size=32):
-    """Use the archived validation-selected rule; no test-driven size selection."""
+    """Extract nodes with the saved greedy-addition or marginal-gain rule."""
     ranked = sorted(
         zip(candidates, scores.tolist()), key=lambda item: (-max(0.0, item[1]), item[0])
     )

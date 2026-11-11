@@ -237,7 +237,7 @@ def tune_pipeline(
 
 
 def refit_seeds(train, config, *, prediction_head=None, seeds=(0, 1, 2), device="cpu"):
-    """Reuse selected settings without reselecting on held-out test targets."""
+    """Train the selected configuration at each requested seed."""
     for seed in seeds:
         yield seed, train_sae(
             train,

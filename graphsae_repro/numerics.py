@@ -9,10 +9,10 @@ from torch_geometric.nn import SAGEConv
 
 @contextmanager
 def stable_sage_deletion(model):
-    """Accumulate surviving features in float64, then use the original modules.
+    """Sum surviving-neighbor features in float64 for mean-GraphSAGE deletion.
 
-    No cached-sum subtraction is used. This context is intended for input-deletion
-    evaluation on large mean-GraphSAGE fields; topology is supplied by the caller.
+    The caller supplies the perturbed topology. The original modules transform
+    the resulting neighborhood means in the model's dtype.
     """
     originals = {}
 

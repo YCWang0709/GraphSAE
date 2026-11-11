@@ -176,7 +176,7 @@ def _linearized_forward(model, data, capture, contribution):
                 f"Unsupported message-passing layer: {type(conv).__name__}"
             )
 
-        # The paper fixes the ReLU gates observed on the frozen forward pass.
+        # Apply the ReLU gates from the frozen forward pass.
         gate = (layer.pre_activation.to(device) > 0).to(pre_contribution.dtype)
         contribution = pre_contribution * gate
 

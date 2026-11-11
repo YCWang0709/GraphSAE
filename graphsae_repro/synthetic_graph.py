@@ -266,12 +266,7 @@ def sample_attachment_pairs(
 
 
 def structural_node_features(graph: nx.Graph) -> Tensor:
-    """Feature matrix computed from observable graph structure only.
-
-    The ground-truth motif mask is deliberately not used as an input feature.
-    The features are simple enough for GCN/GIN/GAT/GraphSAGE to train but do not
-    directly reveal the class label.
-    """
+    """Constant, degree, clustering, triangle-count, core-number and PageRank features."""
 
     n = graph.number_of_nodes()
     degree = np.array([graph.degree(i) for i in range(n)], dtype=np.float32)

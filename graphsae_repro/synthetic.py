@@ -31,7 +31,7 @@ class SyntheticDataset:
         """Return a target's reference nodes in the original node indexing.
 
         For graph tasks, target is the graph's collection index. Node tasks use
-        role agreement within the supplied field, not a planted motif mask.
+        same-label nodes within the supplied candidate field.
         """
         if self.task == "graph":
             data = self.graphs[target]

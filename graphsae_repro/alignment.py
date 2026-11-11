@@ -1,4 +1,4 @@
-"""Semantic and causal alignment measurements for SAE features."""
+"""Feature alignment and ablation measurements for SAE features."""
 
 from __future__ import annotations
 

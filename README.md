@@ -4,7 +4,7 @@ Graph-grounded sparse autoencoders and SAE-GNNExplainer for frozen graph predict
 
 ## Cora with pretrained checkpoints
 
-A complete inference example is available in [examples/cora_pretrained](examples/cora_pretrained/README.md). It bundles four frozen backbone checkpoints and 12 tuned SAE checkpoints, recomputes the Cora paper row, and renders one-hop explanation subgraphs. Run it without model or SAE fitting:
+A Cora reproduction workflow is available in [examples/cora_pretrained](examples/cora_pretrained/README.md). It loads four frozen backbone checkpoints and 12 tuned SAE checkpoints, recomputes the Cora paper row, and renders one-hop explanation subgraphs:
 
 ```powershell
 python -m pip install -r examples/cora_pretrained/requirements.txt
@@ -37,7 +37,7 @@ python -m pytest -q
 | Molecular mask utilities and dataset compatibility functions | `graphsae_repro/datasets.py` |
 | Command-line entry point | `graphsae_repro/cli.py` |
 
-The supplementary protocol is mapped to the implementation in [METHOD.md](METHOD.md). The Cora inference example includes its frozen predictor and SAE checkpoints. The remaining repository provides source code, configuration templates, and examples; datasets, generated experiment outputs, and paper figures are not distributed.
+The training and evaluation protocol is described in [METHOD.md](METHOD.md). The Cora workflow includes its frozen predictor and SAE checkpoints. Other workflows take dataset bundles, frozen predictor checkpoints, and target IDs through experiment factories.
 
 ## Synthetic dataset construction
 
@@ -61,7 +61,7 @@ python -m graphsae_repro generate-data --dataset all --config configs/synthetic_
 python -m graphsae_repro generate-data --dataset BAPathRole --output data/synthetic
 ```
 
-Each task writes `<output>/<name>/dataset.pt` and `metadata.json`. The bundle contains raw PyG data, labels, split indices, construction settings, and reference annotations; the metadata records construction parameters and dataset sizes. Generated files belong under the ignored `data/` directory. The repository distributes construction code and configuration only.
+Each task writes `<output>/<name>/dataset.pt` and `metadata.json`. The bundle contains PyG data, labels, split indices, construction settings, and reference annotations; the metadata records construction parameters and dataset sizes. Generated files are stored under `data/`.
 
 The Python API supports the same defaults, explicit overrides, saving, and loading:
 
@@ -78,13 +78,13 @@ graphs = generate_synthetic("BAHouse")
 train_graphs = [graphs.graphs[i] for i in graphs.splits["train"]]
 ```
 
-Role tasks store `motif_node_id`, the planted-node union mask, internal motif-edge masks, and a separate edge mask including attachments. All three node tasks use same-label reference nodes within the eligible field; validation queries restrict source class labels to training/validation nodes. Graph tasks retain their planted node and edge masks, including a separate attachment-inclusive mask. Reference annotations are not appended to `x`.
+Role tasks store `motif_node_id`, the planted-node union mask, internal motif-edge masks, and a separate edge mask including attachments. All three node tasks use same-label reference nodes within the eligible field; validation queries restrict source class labels to training/validation nodes. Graph tasks retain their planted node and edge masks, including a separate attachment-inclusive mask.
 
-Development overrides such as `generate_synthetic("BAHouse", num_graphs=12)` are explicit changes from the supplementary setting. For a single-task CLI configuration, supply an options object such as `{"backbone_nodes": 30, "num_motifs": 6}`; the all-task configuration uses the `datasets` mapping shown in the supplied JSON. `examples.synthetic:load` accepts `dataset_path` to reuse a generated bundle and `generator_options` for explicit construction overrides.
+For a small run, use `generate_synthetic("BAHouse", num_graphs=12)`. For a single-task CLI configuration, supply an options object such as `{"backbone_nodes": 30, "num_motifs": 6}`; the all-task configuration uses the `datasets` mapping shown in the supplied JSON. `examples.synthetic:load` accepts `dataset_path` to reuse a generated bundle and `generator_options` to set construction parameters.
 
 ## General SAE training
 
-For an arbitrary activation matrix, use the tensor API. It requires neither a GNN nor semantic labels:
+Use the tensor API to train an SAE on an activation matrix:
 
 ```python
 import torch
@@ -129,11 +129,13 @@ graphsae tune-explainer --factory examples.toy:load --space configs/smoke_search
 graphsae explain --factory examples.toy:load --sae artifacts/toy/sae_seed_0.pt --policy artifacts/toy/selected_policy.json --split test --output artifacts/toy_test
 ```
 
-Use `configs/sae_search.json` for a larger reference search, and supply factory arguments through `--factory-options options.json`. The search varies dictionary width, active count, learning rate, duration, and auxiliary weights. The example grid is editable: the supplementary specifies these search dimensions, rather than a single universal candidate grid. No dataset-specific selected parameters or measured outcomes are embedded in it.
+Set the training search grid in `configs/sae_search.json`, and supply factory arguments through `--factory-options options.json`. The grid controls dictionary width, active count, learning rate, training duration, and auxiliary weights. Factory options specify the dataset, predictor checkpoint, and target cohort.
 
 Fixed-budget selection uses one training/ranking policy across budgets 8, 12, and 16. Native-size selection uses `--native --policies configs/policies_native.json`. Native policies include positive support, relative thresholds, positive-score mass, ranked prefixes, and greedy additions/removals. Separate templates cover topology-based city-reviews masks and block refinement. Search uses seed 0, then refits the selected training configuration with seeds 0, 1, and 2. Test targets are evaluated only by the separate `explain` command.
 
-The validation utility is explicit: mean probability decrease plus a configurable Jaccard weight, minus a configurable node-count penalty. Regression uses mean absolute prediction change. Set these weights before running selection; the selected utility, training configuration, policy, and trials are saved together. For node datasets whose reference masks depend on source class labels, validation references must exclude test-source labels; `node_reference` implements this restriction for all three synthetic node tasks.
+Graph readout policies are supplied in `configs/policies_graph_readout.json` for fixed budgets and `configs/policies_synthetic_graph_native.json` for native-size extraction.
+
+The validation utility is mean probability decrease plus a configurable Jaccard weight, minus a configurable node-count penalty. Regression uses mean absolute prediction change. Set these weights before selection; the utility, training configuration, policy, and trials are saved together. For all three synthetic node tasks, `node_reference` restricts validation references to training/validation source labels.
 
 ## Cora and graph classification
 
@@ -150,7 +152,7 @@ python scripts/05_sae_gnnexplainer.py --model GCN --top-k 12
 python scripts/06_mask_experiment.py --model GCN --top-k 12 --mask-mode both
 ```
 
-Repeat with `GAT`, `GIN`, or `GraphSAGE`. Backbone training selects its checkpoint by validation loss. Existing checkpoints from the former two-layer implementation must be retrained for the current configurable backbone architecture.
+Repeat with `GAT`, `GIN`, or `GraphSAGE`. Backbone training selects its checkpoint by validation loss. Checkpoints store the architecture parameters used to load the predictor.
 
 For Cora explanation tuning, create a factory-options JSON pointing to the newly trained checkpoint:
 
@@ -158,7 +160,7 @@ For Cora explanation tuning, create a factory-options JSON pointing to the newly
 {"checkpoint": "artifacts/cora/backbone_gcn.pt", "targets_per_split": 25}
 ```
 
-Then use `--factory examples.cora:load --factory-options options.json` with `tune-explainer` and `explain`. Target lists are deterministic and are not filtered by test prediction correctness.
+Then use `--factory examples.cora:load --factory-options options.json` with `tune-explainer` and `explain`. The factory selects deterministic target lists from each split.
 
 The graph-classification workflow downloads MUTAG, creates stratified training/validation/test splits, saves a frozen predictor and activation packs, and runs SAE training and explanation:
 
@@ -170,7 +172,7 @@ Use `examples.from_checkpoint:load` with its generated `backbone.pt` and `datase
 
 ## Ablations
 
-All training ablations call the shared SAE trainer. Full SAE-GNNExplainer is not duplicated in the ablation module.
+Run training and explanation ablations through the shared implementations:
 
 ```powershell
 graphsae ablate --train train.pt --evaluation val.pt --head head.pt --config configs/graphsae_fixed.json --study losses --output artifacts/loss_ablations
@@ -184,7 +186,7 @@ graphsae ablate-explanations --factory examples.toy:load --sae artifacts/toy/sae
 
 Loss variants remove reconstruction, grounding, faithfulness, or coherence independently, or retain reconstruction alone. Sensitivity changes individual weights, dictionary width, and the joint grounding/faithfulness grid. Encoder variants include BatchTopK, JumpReLU, Gated, and ReLU. The dedicated L1 selection follows the supplementary's four-coefficient search and active-feature preference; its selected coefficient can then be reused with `refit_seeds` and the common path mapping. Signed evidence uses matched total node budgets with deterministic shortage handling.
 
-Training ablations share a deterministic population of at most 2,048 training representations. Evaluation is capped separately at 2,048 rows and never changes configurations. Run single-factor sensitivity on the test pack and joint-weight sensitivity on the validation pack; [METHOD.md](METHOD.md) specifies the configuration filters. The complete fixed reference can be trained once through `train-sae` on the same `subset_pack(train, 2048, seed=0)` population.
+Training ablations share a deterministic population of at most 2,048 training representations. Evaluation is capped separately at 2,048 rows. Run single-factor sensitivity on the test pack and joint-weight sensitivity on the validation pack; [METHOD.md](METHOD.md) specifies the configuration filters. Train the complete fixed reference through `train-sae` on the same `subset_pack(train, 2048, seed=0)` population.
 
 ## Custom predictors and heterogeneous graphs
 
@@ -195,5 +197,3 @@ python -m examples.heterogeneous
 ```
 
 Included backbones use ReLU and mean graph pooling. Custom adapters preserve their predictor's own readout, activations, normalization, and typed structure. Standard homogeneous/bipartite GAT layers use frozen observed attention during attribution. Shared recurrent GAT modules and edge-conditioned/custom attention require an explicit attention context. Deletion always replays the ordinary predictor with its normalization, means, attention, and gates recomputed.
-
-Reproducing a particular reported dataset/predictor case requires its original preprocessing, split, frozen architecture, and validation target cohort. The examples provide runnable workflows and adapters without distributing those experiment artifacts.
