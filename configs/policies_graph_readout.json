@@ -1,0 +1,4 @@
+[
+  {"source_mode": "readout", "weighting": "activity", "mode": "fixed", "evidence": "positive"},
+  {"source_mode": "readout", "weighting": "prediction", "mode": "fixed", "evidence": "positive"}
+]

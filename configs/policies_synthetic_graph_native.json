@@ -1,0 +1,12 @@
+[
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.001},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.01},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.025},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.05},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.1},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.2},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.35},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.5},
+  {"source_mode": "readout", "weighting": "activity", "mode": "relative", "threshold": 0.75}
+]

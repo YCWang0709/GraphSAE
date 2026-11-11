@@ -190,6 +190,7 @@ def source_scores(
     *,
     target_index: int = 0,
     device: torch.device | str = "cpu",
+    source_mode: str = "input",
 ) -> tuple[list[int], Tensor]:
     """Project local source terms in one reverse pass, holding GAT attention fixed.
 
@@ -197,6 +198,13 @@ def source_scores(
     <x_u, [L^T a]_u>. This avoids storing a sources-by-nodes Jacobian.
     The original full graph supplies normalization degrees and boundary messages.
     """
+    if source_mode == "readout":
+        candidates, terms = graph_readout_contributions(
+            model, data, graph_index=target_index, device=device
+        )
+        return candidates, terms @ direction.detach().cpu().to(terms.dtype)
+    if source_mode != "input":
+        raise ValueError("source_mode must be input or readout")
     device = torch.device(device)
     model = model.to(device).eval()
     data = data.to(device)
@@ -271,7 +279,7 @@ def node_source_contributions(
     return candidates, contributions
 
 
-def graph_source_contributions(
+def graph_readout_contributions(
     model: GNNBackbone,
     data,
     *,
@@ -279,7 +287,52 @@ def graph_source_contributions(
     candidate_nodes: Sequence[int] | None = None,
     device: torch.device | str = "cpu",
 ) -> tuple[list[int], Tensor]:
+    if model.task != "graph":
+        raise ValueError("Readout contributions require a graph-level predictor")
+    device = torch.device(device)
+    model = model.to(device).eval()
+    data = data.to(device)
+    with torch.no_grad():
+        _, capture = model(
+            data.x, data.edge_index, batch=getattr(data, "batch", None), capture=True
+        )
+    batch = capture.batch
+    if batch is None:
+        batch = torch.zeros(capture.node.size(0), dtype=torch.long, device=device)
+    graph_nodes = torch.where(batch == int(graph_index))[0].tolist()
+    if not graph_nodes:
+        raise IndexError(f"No nodes belong to graph {graph_index}")
+    candidates = (
+        graph_nodes if candidate_nodes is None else list(map(int, candidate_nodes))
+    )
+    invalid = sorted(set(candidates) - set(graph_nodes))
+    if invalid:
+        raise ValueError(
+            f"Candidate nodes do not belong to graph {graph_index}: {invalid}"
+        )
+    return candidates, capture.node[candidates].detach().cpu() / len(graph_nodes)
+
+
+def graph_source_contributions(
+    model: GNNBackbone,
+    data,
+    *,
+    graph_index: int = 0,
+    candidate_nodes: Sequence[int] | None = None,
+    device: torch.device | str = "cpu",
+    source_mode: str = "input",
+) -> tuple[list[int], Tensor]:
     """Return ``c_{u;G} = |V|^{-1} sum_v r_{u->v}^{(L)}`` for one graph."""
+    if source_mode == "readout":
+        return graph_readout_contributions(
+            model,
+            data,
+            graph_index=graph_index,
+            candidate_nodes=candidate_nodes,
+            device=device,
+        )
+    if source_mode != "input":
+        raise ValueError("source_mode must be input or readout")
     device = torch.device(device)
     model = model.to(device).eval()
     data = data.to(device)

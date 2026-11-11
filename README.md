@@ -78,7 +78,7 @@ graphs = generate_synthetic("BAHouse")
 train_graphs = [graphs.graphs[i] for i in graphs.splits["train"]]
 ```
 
-Role tasks store `motif_node_id`, the planted-node union mask, internal motif-edge masks, and a separate edge mask including attachments. Target-specific reference queries use stored motif membership. BATriadic references use structural-role agreement within the eligible field; validation queries restrict source class labels to training/validation nodes. Graph tasks retain their planted node and edge masks, including a separate attachment-inclusive mask. Reference annotations are not appended to `x`.
+Role tasks store `motif_node_id`, the planted-node union mask, internal motif-edge masks, and a separate edge mask including attachments. All three node tasks use same-label reference nodes within the eligible field; validation queries restrict source class labels to training/validation nodes. Graph tasks retain their planted node and edge masks, including a separate attachment-inclusive mask. Reference annotations are not appended to `x`.
 
 Development overrides such as `generate_synthetic("BAHouse", num_graphs=12)` are explicit changes from the supplementary setting. For a single-task CLI configuration, supply an options object such as `{"backbone_nodes": 30, "num_motifs": 6}`; the all-task configuration uses the `datasets` mapping shown in the supplied JSON. `examples.synthetic:load` accepts `dataset_path` to reuse a generated bundle and `generator_options` for explicit construction overrides.
 
@@ -133,7 +133,7 @@ Use `configs/sae_search.json` for a larger reference search, and supply factory 
 
 Fixed-budget selection uses one training/ranking policy across budgets 8, 12, and 16. Native-size selection uses `--native --policies configs/policies_native.json`. Native policies include positive support, relative thresholds, positive-score mass, ranked prefixes, and greedy additions/removals. Separate templates cover topology-based city-reviews masks and block refinement. Search uses seed 0, then refits the selected training configuration with seeds 0, 1, and 2. Test targets are evaluated only by the separate `explain` command.
 
-The validation utility is explicit: mean probability decrease plus a configurable Jaccard weight, minus a configurable node-count penalty. Regression uses mean absolute prediction change. Set these weights before running selection; the selected utility, training configuration, policy, and trials are saved together. For node datasets whose reference masks depend on source class labels, validation references must exclude test-source labels; `node_reference` implements this restriction for BATriadic.
+The validation utility is explicit: mean probability decrease plus a configurable Jaccard weight, minus a configurable node-count penalty. Regression uses mean absolute prediction change. Set these weights before running selection; the selected utility, training configuration, policy, and trials are saved together. For node datasets whose reference masks depend on source class labels, validation references must exclude test-source labels; `node_reference` implements this restriction for all three synthetic node tasks.
 
 ## Cora and graph classification
 

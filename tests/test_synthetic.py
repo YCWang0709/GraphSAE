@@ -71,9 +71,17 @@ def test_node_motif_topology_labels_and_reference_masks(
         data.gt_explanation_edge_mask_with_attachment.sum()
         == 6 * (internal_edges + 1) * 2
     )
-    assert generated.reference(20) == [21, 22, 23, 24]
-    assert generated.reference(0) == []
-    assert generated.reference(20, [19, 20, 21, 27]) == [21]
+    expected = (
+        [24, 25, 29, 30, 34, 35, 39, 40, 44, 45, 49]
+        if name == "BAPathRole"
+        else [21, 25, 26, 30, 31, 35, 36, 40, 41, 45, 46]
+    )
+    assert generated.reference(20) == expected
+    assert generated.reference(0) == list(range(1, 20))
+    assert generated.reference(20, [19, 20, 21, 27]) == (
+        [] if name == "BAPathRole" else [21]
+    )
+    assert generated.summary()["reference"] == "role_agreement"
     edges = set(map(tuple, data.edge_index.T.tolist()))
     if name == "BAPathRole":
         expected = {(20 + i, 21 + i) for i in range(4)}

@@ -145,6 +145,9 @@ def main(argv=None):
                     "--study", choices=["pure-path", "signed"], required=True
                 )
                 sub.add_argument("--budgets", nargs="+", type=int, default=[8, 12, 16])
+                sub.add_argument(
+                    "--source-mode", choices=["input", "readout"], default="input"
+                )
     args = parser.parse_args(argv)
     output = Path(args.output)
     if args.command == "generate-data":
@@ -338,6 +341,7 @@ def main(argv=None):
                         artifact,
                         target_index=target.target_index,
                         device=args.device,
+                        source_mode=args.source_mode,
                     )
                     selected = select_nodes(
                         ids, scores, ExtractionPolicy(mode="support")
@@ -366,6 +370,9 @@ def main(argv=None):
                             artifact,
                             target_index=target.target_index,
                             top_k=budget,
+                            policy=ExtractionPolicy(
+                                budget=budget, source_mode=args.source_mode
+                            ),
                             task_type=experiment.task_type,
                             device=args.device,
                         )

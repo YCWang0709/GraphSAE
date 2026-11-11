@@ -18,33 +18,18 @@ def synthetic_graph_dataset(name, *, num_graphs=900, **options):
 
 
 def node_reference(name, data, target, candidates, *, split="test", backbone_nodes=750):
-    """Motif membership, or BATriadic role agreement within the source field.
+    """Same-label reference nodes within the supplied source field.
 
     Validation role references use only train/validation source labels.
     """
-    if name == "BATriadic":
-        eligible = candidates
-        if split == "val":
-            eligible = [
-                u for u in candidates if bool(data.train_mask[u] | data.val_mask[u])
-            ]
-        return [u for u in eligible if u != target and data.y[u] == data.y[target]]
-    membership = getattr(data, "motif_node_id", None)
-    if membership is not None:
-        motif = int(membership[target])
-        return [
-            u
-            for u in candidates
-            if u != target and motif >= 0 and int(membership[u]) == motif
+    if name not in NODE_DATASETS:
+        raise ValueError(f"Expected a node dataset from {NODE_DATASETS}")
+    eligible = candidates
+    if split == "val":
+        eligible = [
+            u for u in candidates if bool(data.train_mask[u] | data.val_mask[u])
         ]
-    if target < backbone_nodes:
-        return []
-    motif = (target - backbone_nodes) // 5
-    return [
-        u
-        for u in candidates
-        if u != target and u >= backbone_nodes and (u - backbone_nodes) // 5 == motif
-    ]
+    return [u for u in eligible if u != target and data.y[u] == data.y[target]]
 
 
 def mutag_proxy_mask(atom_types, edge_index, *, nitrogen=1, oxygen=4):

@@ -41,6 +41,8 @@ class GraphSAE:
         blocks=None,
     ):
         policy = policy or ExtractionPolicy()
+        if policy.source_mode != "input":
+            raise ValueError("Readout mode requires the graph explainer interface")
         adapter.model.eval()
         with torch.no_grad():
             raw = adapter.representation(data, target).detach()

@@ -30,7 +30,7 @@ class SyntheticDataset:
     def reference(self, target: int, candidates=None, *, split="test") -> list[int]:
         """Return a target's reference nodes in the original node indexing.
 
-        For graph tasks, target is the graph's collection index. BATriadic uses
+        For graph tasks, target is the graph's collection index. Node tasks use
         role agreement within the supplied field, not a planted motif mask.
         """
         if self.task == "graph":
@@ -56,7 +56,7 @@ class SyntheticDataset:
             "num_directed_edges": sum(data.num_edges for data in population),
             "num_features": population[0].num_features,
             "reference": (
-                "role_agreement" if self.name == "BATriadic" else "planted_motifs"
+                "role_agreement" if self.task == "node" else "planted_motifs"
             ),
         }
 

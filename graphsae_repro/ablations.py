@@ -63,7 +63,9 @@ def train_ablations(
             )
 
 
-def pure_path_scores(model, data, artifact, *, target_index=0, device="cpu"):
+def pure_path_scores(
+    model, data, artifact, *, target_index=0, device="cpu", source_mode="input"
+):
     """Q(u)=<c_u/rho, (s-mu)/rho>; native selection keeps Q(u)>0."""
     with torch.no_grad():
         model = model.to(device).eval()
@@ -76,7 +78,12 @@ def pure_path_scores(model, data, artifact, *, target_index=0, device="cpu"):
     ].cpu()
     direction = (target - artifact.mean.reshape(-1)) / artifact.std.reshape(-1).square()
     return source_scores(
-        model, data, direction, target_index=target_index, device=device
+        model,
+        data,
+        direction,
+        target_index=target_index,
+        device=device,
+        source_mode=source_mode,
     )
 
 

@@ -97,7 +97,12 @@ def explain(
         num_features=num_features,
     )
     candidates, scores = source_scores(
-        model, data, direction, target_index=target_index, device=device
+        model,
+        data,
+        direction,
+        target_index=target_index,
+        device=device,
+        source_mode=policy.source_mode,
     )
     variants = {
         key: select_nodes(

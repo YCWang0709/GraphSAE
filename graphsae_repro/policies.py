@@ -17,8 +17,11 @@ class ExtractionPolicy:
     size_penalty: float = 0.0
     refinement: str = "local"
     stable_sage: bool = False
+    source_mode: str = "input"
 
     def __post_init__(self):
+        if self.source_mode not in {"input", "readout"}:
+            raise ValueError("source_mode must be input or readout")
         if self.mode not in {
             "fixed",
             "support",
