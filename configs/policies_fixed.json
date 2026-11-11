@@ -1,0 +1,4 @@
+[
+  {"weighting": "activity", "mode": "fixed", "evidence": "positive"},
+  {"weighting": "prediction", "mode": "fixed", "evidence": "positive"}
+]

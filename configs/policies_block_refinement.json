@@ -1,0 +1,5 @@
+[
+  {"mode": "support", "refinement": "blocks", "refine_steps": 8, "stable_sage": true},
+  {"mode": "relative", "threshold": 0.1, "refinement": "blocks", "refine_steps": 8, "stable_sage": true},
+  {"weighting": "prediction", "mode": "support", "refinement": "blocks", "refine_steps": 8, "stable_sage": true}
+]

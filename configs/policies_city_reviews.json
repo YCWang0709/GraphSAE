@@ -1,0 +1,6 @@
+[
+  {"mode": "one_hop"},
+  {"mode": "support"},
+  {"mode": "relative", "threshold": 0.1, "refine_steps": 8, "size_penalty": 0.0001},
+  {"mode": "mass", "mass_fraction": 0.9, "refine_steps": 8, "size_penalty": 0.0001}
+]

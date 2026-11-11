@@ -1,0 +1,9 @@
+{
+  "task_type": "regression",
+  "epochs": 100,
+  "expansion": 8,
+  "k_active": 16,
+  "lambda_ground": 0.01,
+  "lambda_faith": 0.1,
+  "lambda_coh": 0.01
+}

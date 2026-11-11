@@ -1,0 +1,6 @@
+include README.md METHOD.md requirements.txt
+recursive-include configs *.json
+recursive-include examples *.py
+recursive-include examples/cora_pretrained *.json *.md *.txt *.pt
+recursive-include scripts *.py
+recursive-include tests *.py

@@ -1,0 +1,10 @@
+{
+  "expansion": 8,
+  "k_active": 16,
+  "epochs": 100,
+  "batch_size": 512,
+  "lr": 0.001,
+  "lambda_ground": 0.0,
+  "lambda_faith": 0.0,
+  "lambda_coh": 0.0
+}

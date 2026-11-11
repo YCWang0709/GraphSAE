@@ -1,0 +1,19 @@
+{
+  "base": {
+    "epochs": 100,
+    "expansion": 8,
+    "k_active": 16,
+    "lambda_ground": 0.01,
+    "lambda_faith": 0.1,
+    "lambda_coh": 0.01
+  },
+  "grid": {
+    "expansion": [4, 8],
+    "k_active": [8, 16],
+    "lr": [0.0003, 0.001],
+    "epochs": [50, 100],
+    "lambda_ground": [0.001, 0.01],
+    "lambda_faith": [0.01, 0.1],
+    "lambda_coh": [0.001, 0.01]
+  }
+}

@@ -3,10 +3,21 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "graphsae-repro"
-version = "0.1.0"
-description = "Minimal reproducibility code for GraphSAE"
+name = "graphsae"
+version = "0.2.0"
+description = "Graph-grounded sparse autoencoders and source-node explanations"
 requires-python = ">=3.10"
+dependencies = ["torch>=2.1", "torch-geometric>=2.4", "numpy>=1.24", "pandas>=2.0", "networkx>=3.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+notebook = ["jupyter>=1.0"]
+
+[project.scripts]
+graphsae = "graphsae_repro.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.setuptools]
 packages = ["graphsae_repro"]

@@ -18,7 +18,11 @@ from graphsae_repro.backbones import build_backbone, canonical_model_name
 
 
 def resolve_device(value: str) -> torch.device:
-    return torch.device("cuda" if value == "auto" and torch.cuda.is_available() else ("cpu" if value == "auto" else value))
+    return torch.device(
+        "cuda"
+        if value == "auto" and torch.cuda.is_available()
+        else ("cpu" if value == "auto" else value)
+    )
 
 
 def artifact_dir(value: str | None) -> Path:
@@ -42,7 +46,9 @@ def sae_path(out_dir: Path, model_name: str) -> Path:
 
 
 def activation_path(out_dir: Path, model_name: str, split: str) -> Path:
-    return out_dir / f"activations_{canonical_model_name(model_name).lower()}_{split}.pt"
+    return (
+        out_dir / f"activations_{canonical_model_name(model_name).lower()}_{split}.pt"
+    )
 
 
 def save_json(path: Path, payload: object) -> None:
@@ -60,6 +66,7 @@ def load_backbone(path: Path, *, device: torch.device):
         hidden_channels=int(checkpoint["hidden_channels"]),
         dropout=float(checkpoint["dropout"]),
         gat_heads=int(checkpoint["gat_heads"]),
+        num_layers=int(checkpoint["num_layers"]),
     )
     model.load_state_dict(checkpoint["state_dict"])
     return model.to(device).eval(), checkpoint
@@ -70,7 +77,9 @@ def choose_correct_test_node(model, data, *, device: torch.device) -> int:
     data = data.to(device)
     with torch.no_grad():
         logits = model(data.x, data.edge_index)
-    candidates = torch.nonzero(data.test_mask & (logits.argmax(dim=-1) == data.y), as_tuple=False).view(-1)
+    candidates = torch.nonzero(
+        data.test_mask & (logits.argmax(dim=-1) == data.y), as_tuple=False
+    ).view(-1)
     if candidates.numel() == 0:
         candidates = torch.nonzero(data.test_mask, as_tuple=False).view(-1)
     return int(candidates[0].item())

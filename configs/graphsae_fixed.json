@@ -1,0 +1,18 @@
+{
+  "expansion": 8,
+  "k_active": 16,
+  "encoder_type": "topk",
+  "epochs": 100,
+  "batch_size": 512,
+  "lr": 0.001,
+  "lambda_rec": 1.0,
+  "lambda_ground": 0.01,
+  "lambda_faith": 0.1,
+  "lambda_coh": 0.01,
+  "lambda_stab": 0.0,
+  "l1_weight": 0.0,
+  "regularizer_ramp_epochs": 5,
+  "normalize_decoder": true,
+  "standardize": true,
+  "seed": 0
+}

@@ -1,181 +1,202 @@
-"""SAE-GNNExplainer for node and graph classification.
-
-Node classification scores k-hop source nodes through target-active SAE codes.
-Graph classification instead allocates an active pooled SAE direction back to
-the final-layer node states used by mean readout.  The different treatment is
-necessary because graph logits are computed after pooling whereas node logits
-are computed directly from each node's final representation.
-"""
+"""SAE-GNNExplainer: local source decomposition and active decoder projection."""
 
 from __future__ import annotations
 
-from typing import Iterable
-
+from dataclasses import asdict, replace
 import torch
 from torch import Tensor
-from torch_geometric.utils import k_hop_subgraph
+import torch.nn.functional as F
 
-from .alignment import top_active_feature_ids
+from .contributions import source_scores
+from .policies import ExtractionPolicy, select_nodes, refine_nodes, score_blocks
 from .sae import SAEArtifact
 
 
-def _classifier_direction(model, reference_class: int) -> Tensor:
-    if not hasattr(model, "classifier"):
-        raise TypeError("SAE-GNNExplainer requires a backbone exposing .classifier")
-    return model.classifier.weight.detach().cpu()[int(reference_class)]
+def target_direction(
+    artifact: SAEArtifact,
+    representation: Tensor,
+    *,
+    weighting="activity",
+    prediction_gradient: Tensor | None = None,
+    num_features: int | None = None,
+):
+    codes = artifact.encode(representation.reshape(1, -1))[0]
+    active = torch.where(codes > 1e-8)[0]
+    active = active[torch.argsort(codes[active], descending=True, stable=True)]
+    if num_features is not None:
+        active = active[:num_features]
+    decoder = artifact.sae.decoder.weight.detach().cpu()[:, active]
+    directions = F.normalize(decoder, dim=0)
+    weights = codes[active]
+    if weighting == "prediction":
+        if prediction_gradient is None:
+            raise ValueError(
+                "prediction weighting requires an original-space head gradient"
+            )
+        effects = (
+            directions * artifact.std.cpu().reshape(-1, 1)
+        ).T @ prediction_gradient.cpu()
+        weights = weights * effects
+    elif weighting != "activity":
+        raise ValueError("weighting must be activity or prediction")
+    direction = (directions @ weights) / artifact.std.cpu().reshape(-1)
+    features = [
+        {"feature_id": int(k), "activation": float(codes[k]), "weight": float(w)}
+        for k, w in zip(active, weights)
+    ]
+    return direction, features
 
 
-def _feature_rows(artifact: SAEArtifact, codes: Tensor, reference_direction: Tensor, *, num_features: int) -> list[dict]:
-    feature_ids = top_active_feature_ids(codes, limit=num_features)
-    decoder = artifact.sae.decoder.weight.detach().cpu()
-    rows = []
-    for rank, feature_id in enumerate(feature_ids, start=1):
-        class_effect = float(torch.dot(decoder[:, feature_id], reference_direction).item())
-        rows.append(
-            {
-                "rank": rank,
-                "feature_id": int(feature_id),
-                "activation": float(codes[feature_id].item()),
-                "classifier_effect": class_effect,
-                "signed_feature_effect": float(codes[feature_id].item() * class_effect),
-            }
+def _induced_subgraph(edge_index, nodes):
+    ids = torch.tensor(nodes, dtype=torch.long, device=edge_index.device)
+    keep = torch.isin(edge_index[0], ids) & torch.isin(edge_index[1], ids)
+    return {"nodes": nodes, "edges": edge_index[:, keep].T.cpu().tolist()}
+
+
+def explain(
+    model,
+    data,
+    artifact,
+    *,
+    target_index=0,
+    top_k=8,
+    num_features=None,
+    policy: ExtractionPolicy | None = None,
+    task_type="classification",
+    device="cpu",
+    evaluator=None,
+    blocks=None,
+):
+    model = model.to(device).eval()
+    data = data.to(device)
+    policy = policy or ExtractionPolicy(budget=top_k)
+    with torch.no_grad():
+        logits, capture = model(
+            data.x, data.edge_index, batch=getattr(data, "batch", None), capture=True
         )
-    return rows
+    h = capture.graph if model.task == "graph" else capture.node
+    raw = h[target_index].detach()
+    gradient = None
+    if policy.weighting == "prediction":
+        with torch.enable_grad():
+            value = raw.clone().requires_grad_(True)
+            output = model.classifier(value)
+            if task_type == "regression":
+                score = output.reshape(-1)[0]
+            else:
+                from .evaluation import class_logits
 
+                row = class_logits(output.reshape(1, -1))[0]
+                score = row[row.detach().argmax()]
+            (gradient,) = torch.autograd.grad(score, value)
+    direction, features = target_direction(
+        artifact,
+        raw,
+        weighting=policy.weighting,
+        prediction_gradient=gradient,
+        num_features=num_features,
+    )
+    candidates, scores = source_scores(
+        model, data, direction, target_index=target_index, device=device
+    )
+    variants = {
+        key: select_nodes(
+            candidates,
+            scores,
+            replace(policy, mode="fixed", refine_steps=0, evidence=sign),
+        )
+        for key, sign in [
+            ("sae_positive", "positive"),
+            ("sae_negative", "negative"),
+            ("sae_signed", "mixed"),
+        ]
+    }
+    if policy.mode == "one_hop":
+        if model.task != "node":
+            raise ValueError("one_hop extraction applies to node targets")
+        neighbors = data.edge_index[0, data.edge_index[1] == target_index].tolist()
+        selected = sorted(set(neighbors) & set(candidates))
+    else:
+        selected = select_nodes(candidates, scores, policy)
+    if policy.refine_steps:
+        if policy.mode == "fixed":
+            raise ValueError("Refinement changes cardinality; use native-size policies")
+        if evaluator is None:
+            from .evaluation import deletion_metrics
 
-def _select(scores: Tensor, candidate_mask: Tensor, *, top_k: int, positive: bool) -> list[int]:
-    values = scores.clone()
-    values[~candidate_mask] = float("-inf") if positive else float("inf")
-    order = torch.argsort(values, descending=positive)
-    selected: list[int] = []
-    for index in order.tolist():
-        if not bool(candidate_mask[index]):
-            continue
-        value = float(scores[index].item())
-        if (positive and value <= 0) or ((not positive) and value >= 0):
-            continue
-        selected.append(int(index))
-        if len(selected) >= int(top_k):
-            break
-    return selected
-
-
-@torch.no_grad()
-def explain_node(
-    model,
-    data,
-    artifact: SAEArtifact,
-    *,
-    target_node: int,
-    num_features: int = 16,
-    top_k: int = 8,
-    device: torch.device | str = "cpu",
-) -> dict:
-    """Return SAE+, SAE-, and SAE+/- explanation nodes for one target node."""
-    device = torch.device(device)
-    model = model.to(device).eval()
-    data = data.to(device)
-    logits, capture = model(data.x, data.edge_index, batch=getattr(data, "batch", None), capture=True)
-    target_node = int(target_node)
-    reference_class = int(logits[target_node].argmax().item())
-    codes = artifact.encode(capture.node, device=device)
-    features = _feature_rows(artifact, codes[target_node], _classifier_direction(model, reference_class), num_features=num_features)
-    if not features:
-        return {"target_node": target_node, "reference_class": reference_class, "active_features": [], "node_scores": [], "sae_positive": [], "sae_negative": [], "sae_signed": []}
-
-    feature_ids = torch.tensor([row["feature_id"] for row in features], dtype=torch.long)
-    feature_weights = torch.tensor([row["classifier_effect"] for row in features], dtype=torch.float32)
-    signed_scores = (codes[:, feature_ids] * feature_weights).sum(dim=-1)
-    candidate_nodes, _, _, _ = k_hop_subgraph(target_node, int(getattr(model, "num_layers", 2)), data.edge_index, relabel_nodes=False)
-    candidate_mask = torch.zeros(codes.size(0), dtype=torch.bool)
-    candidate_mask[candidate_nodes.detach().cpu()] = True
-    candidate_mask[target_node] = False
-    positive = _select(signed_scores, candidate_mask, top_k=top_k, positive=True)
-    negative = _select(signed_scores, candidate_mask, top_k=top_k, positive=False)
-    ranked = torch.argsort(signed_scores.abs(), descending=True)
-    node_scores = [
-        {
-            "node_id": int(node_id),
-            "in_receptive_field": bool(candidate_mask[node_id]),
-            "signed_score": float(signed_scores[node_id].item()),
-            "positive_score": float(max(0.0, signed_scores[node_id].item())),
-            "negative_score": float(max(0.0, -signed_scores[node_id].item())),
-        }
-        for node_id in ranked.tolist()
-        if bool(candidate_mask[node_id])
-    ]
+            evaluator = lambda ids: deletion_metrics(
+                model,
+                data,
+                ids,
+                target_index=target_index,
+                task_type=task_type,
+                device=device,
+                stable_sage=policy.stable_sage,
+            )[
+                (
+                    "absolute_change"
+                    if task_type == "regression"
+                    else "probability_decrease"
+                )
+            ]
+        if policy.refinement == "blocks" and blocks is None:
+            blocks = score_blocks(
+                candidates,
+                scores,
+                data.edge_index,
+                target_index=target_index if model.task == "node" else None,
+            )
+        selected = refine_nodes(
+            selected,
+            candidates,
+            scores,
+            evaluator,
+            steps=policy.refine_steps,
+            edge_index=data.edge_index,
+            blocks=blocks,
+            size_penalty=policy.size_penalty,
+        )
     return {
-        "task": "node",
-        "target_node": target_node,
-        "reference_class": reference_class,
+        "task": model.task,
+        "target_index": target_index,
+        **(
+            {"target_node": target_index}
+            if model.task == "node"
+            else {"graph_index": target_index}
+        ),
+        "reference_class": (
+            int(logits[target_index].argmax())
+            if logits.shape[-1] > 1
+            else int(logits[target_index].item() > 0)
+        ),
         "active_features": features,
-        "node_scores": node_scores,
-        "sae_positive": positive,
-        "sae_negative": negative,
-        "sae_signed": sorted(set(positive) | set(negative)),
+        "policy": asdict(policy),
+        "node_budget": policy.budget,
+        "selected_nodes": selected,
+        **variants,
+        "node_scores": [
+            {
+                "node_id": u,
+                "signed_score": float(s),
+                "positive_score": max(0.0, float(s)),
+                "negative_score": max(0.0, -float(s)),
+            }
+            for u, s in zip(candidates, scores)
+        ],
+        "subgraphs": {
+            key: _induced_subgraph(data.edge_index, nodes)
+            for key, nodes in {**variants, "selected": selected}.items()
+        },
     }
 
 
-@torch.no_grad()
-def explain_graph(
-    model,
-    data,
-    artifact: SAEArtifact,
-    *,
-    graph_index: int = 0,
-    num_features: int = 16,
-    top_k: int = 8,
-    device: torch.device | str = "cpu",
-) -> dict:
-    """Allocate graph-active SAE features back to final-layer node states.
+def explain_node(model, data, artifact, *, target_node, **kwargs):
+    if model.task != "node":
+        raise ValueError("A node backbone is required")
+    return explain(model, data, artifact, target_index=target_node, **kwargs)
 
-    For mean pooling, each node contributes ``h_v / |V|`` to the graph hidden
-    state.  We project this contribution onto each active SAE decoder direction
-    and weight it by that feature's class-logit effect.
-    """
-    device = torch.device(device)
-    model = model.to(device).eval()
-    data = data.to(device)
-    logits, capture = model(data.x, data.edge_index, batch=getattr(data, "batch", None), capture=True)
-    if capture.graph is None:
-        raise ValueError("explain_graph requires a graph-classification backbone")
-    graph_index = int(graph_index)
-    reference_class = int(logits[graph_index].argmax().item())
-    graph_codes = artifact.encode(capture.graph, device=device)
-    reference_direction = _classifier_direction(model, reference_class)
-    features = _feature_rows(artifact, graph_codes[graph_index], reference_direction, num_features=num_features)
-    batch = getattr(data, "batch", None)
-    if batch is None:
-        batch = torch.zeros(capture.node.size(0), dtype=torch.long, device=device)
-    graph_nodes = torch.nonzero(batch == graph_index, as_tuple=False).view(-1)
-    node_h = capture.node[graph_nodes].detach().cpu()
-    decoder = artifact.sae.decoder.weight.detach().cpu()
-    signed_scores = torch.zeros(node_h.size(0))
-    for feature in features:
-        direction = decoder[:, int(feature["feature_id"])]
-        node_projection = node_h @ direction
-        signed_scores += node_projection * float(feature["signed_feature_effect"]) / max(1, node_h.size(0))
-    candidate_mask = torch.ones(node_h.size(0), dtype=torch.bool)
-    positive_local = _select(signed_scores, candidate_mask, top_k=top_k, positive=True)
-    negative_local = _select(signed_scores, candidate_mask, top_k=top_k, positive=False)
-    order = torch.argsort(signed_scores.abs(), descending=True)
-    node_scores = [
-        {
-            "node_id": int(graph_nodes[local_id].item()),
-            "signed_score": float(signed_scores[local_id].item()),
-            "positive_score": float(max(0.0, signed_scores[local_id].item())),
-            "negative_score": float(max(0.0, -signed_scores[local_id].item())),
-        }
-        for local_id in order.tolist()
-    ]
-    to_global = lambda ids: [int(graph_nodes[index].item()) for index in ids]
-    return {
-        "task": "graph",
-        "graph_index": graph_index,
-        "reference_class": reference_class,
-        "active_features": features,
-        "node_scores": node_scores,
-        "sae_positive": to_global(positive_local),
-        "sae_negative": to_global(negative_local),
-        "sae_signed": sorted(set(to_global(positive_local)) | set(to_global(negative_local))),
-    }
+
+def explain_graph(model, data, artifact, *, graph_index=0, **kwargs):
+    if model.task != "graph":
+        raise ValueError("A graph backbone is required")
+    return explain(model, data, artifact, target_index=graph_index, **kwargs)

@@ -1,0 +1,4 @@
+{
+  "base": {"epochs": 2, "expansion": 4, "k_active": 3},
+  "grid": {"lambda_ground": [0.0, 0.01]}
+}

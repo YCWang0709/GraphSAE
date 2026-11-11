@@ -1,0 +1,10 @@
+[
+  {"weighting": "activity", "mode": "support"},
+  {"weighting": "prediction", "mode": "support"},
+  {"weighting": "activity", "mode": "relative", "threshold": 0.1},
+  {"weighting": "activity", "mode": "relative", "threshold": 0.3},
+  {"weighting": "activity", "mode": "mass", "mass_fraction": 0.8},
+  {"weighting": "activity", "mode": "prefix", "budget": 8},
+  {"weighting": "activity", "mode": "prefix", "budget": 16},
+  {"weighting": "prediction", "mode": "prefix", "budget": 16, "refine_steps": 32}
+]

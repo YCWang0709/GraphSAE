@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import argparse
 
-from _cora import activation_path, artifact_dir, checkpoint_path, load_backbone, load_cora, resolve_device
+from _cora import (
+    activation_path,
+    artifact_dir,
+    checkpoint_path,
+    load_backbone,
+    load_cora,
+    resolve_device,
+)
 from graphsae_repro.activations import extract_node_activations
 from graphsae_repro.backbones import MODEL_NAMES
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Extract final-layer Cora activations for SAE training or evaluation.")
+    parser = argparse.ArgumentParser(
+        description="Extract final-layer Cora activations for SAE training or evaluation."
+    )
     parser.add_argument("--model", default="GCN", choices=MODEL_NAMES)
     parser.add_argument("--split", default="train", choices=["train", "val", "test"])
     parser.add_argument("--output-dir", default=None)

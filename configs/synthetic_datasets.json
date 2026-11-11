@@ -1,0 +1,43 @@
+{
+  "datasets": {
+    "BATriadic": {
+      "seed": 37,
+      "num_nodes": 2000,
+      "ba_m": 3,
+      "triangle_probability": 0.35
+    },
+    "BAPathRole": {
+      "seed": 43,
+      "backbone_nodes": 750,
+      "num_motifs": 250,
+      "ba_m": 3
+    },
+    "BABiFanRole": {
+      "seed": 47,
+      "backbone_nodes": 750,
+      "num_motifs": 250,
+      "ba_m": 3
+    },
+    "BAHouse": {
+      "seed": 101,
+      "num_graphs": 900,
+      "ba_min_nodes": 22,
+      "ba_max_nodes": 38,
+      "ba_m": 2
+    },
+    "BAPath": {
+      "seed": 404,
+      "num_graphs": 900,
+      "ba_min_nodes": 22,
+      "ba_max_nodes": 38,
+      "ba_m": 2
+    },
+    "BACycle": {
+      "seed": 202,
+      "num_graphs": 900,
+      "ba_min_nodes": 22,
+      "ba_max_nodes": 38,
+      "ba_m": 2
+    }
+  }
+}
